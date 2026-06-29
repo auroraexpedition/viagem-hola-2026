@@ -219,6 +219,43 @@ function wxInfo(code) {
         return { Icon: CloudLightning, label: "Tempestade" };
     return { Icon: Cloud, label: "Tempo instável" };
 }
+function slotsView(day) {
+    if (!day.sched || !day.sched.length)
+        return day.slots;
+    const ROTINA = ["Acordar", "Café da manhã", "Almoço", "Jantar", "Ponto de encontro", "Retorno", "Tempo livre"];
+    const isRotina = (l) => ROTINA.some((p) => l.startsWith(p));
+    const clean = (l) => {
+        let x = l, stripped = false;
+        for (const p of ["Saída de ônibus — ", "Saída de coach — ", "Saída de carro — "]) {
+            if (x.startsWith(p)) {
+                x = x.slice(p.length);
+                stripped = true;
+                break;
+            }
+        }
+        if (!stripped) {
+            const dash = x.indexOf(" — ");
+            if (dash > 0)
+                x = x.slice(0, dash);
+        }
+        const par = x.indexOf(" (");
+        if (par > 0)
+            x = x.slice(0, par);
+        return x;
+    };
+    const bk = { "Manhã": [], "Tarde": [], "Noite": [] };
+    const all = { "Manhã": [], "Tarde": [], "Noite": [] };
+    for (const it of day.sched) {
+        const h = Number(it.t.slice(0, 2));
+        const per = h < 12 ? "Manhã" : (h < 19 ? "Tarde" : "Noite");
+        const lab = clean(it.l);
+        all[per].push(lab);
+        if (!isRotina(lab))
+            bk[per].push(lab);
+    }
+    const pick = (p) => (bk[p].length ? bk[p] : all[p]);
+    return ["Manhã", "Tarde", "Noite"].filter((p) => pick(p).length).map((p) => ({ l: p, t: pick(p).join(" · ") }));
+}
 export default function App() {
     const [now, setNow] = useState(new Date());
     const [tab, setTab] = useState("hoje");
@@ -499,7 +536,7 @@ export default function App() {
                                         !today && d.kind === "transfer" && React.createElement(Train, { size: 14, color: MUTED }),
                                         !today && (d.kind === "embarque" || d.kind === "volta") && React.createElement(Plane, { size: 14, color: MUTED }),
                                         !today && d.hl && d.kind !== "transfer" && React.createElement(Sparkles, { size: 13, color: GOLD })),
-                                    d.slots.map((s, i) => (React.createElement("div", { key: i, className: "flex", style: { gap: 9, marginTop: i ? 5 : 0 } },
+                                    slotsView(d).map((s, i) => (React.createElement("div", { key: i, className: "flex", style: { gap: 9, marginTop: i ? 5 : 0 } },
                                         React.createElement("span", { style: { fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", color: MUTED, minWidth: 62, paddingTop: 2 } }, s.l),
                                         React.createElement("span", { style: { fontSize: 12.5, lineHeight: 1.4, color: INK } }, s.t)))))));
                         }))));
