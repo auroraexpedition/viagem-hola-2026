@@ -17,11 +17,9 @@
   html,body{margin:0;padding:0}
   body{background:#f6f4ef;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
   #root{min-height:100vh}
-  /* utilitários de layout usados pelo app */
   .flex{display:flex}
   .items-center{align-items:center}
   .justify-between{justify-content:space-between}
-  /* tela de carregamento */
   #boot{display:flex;align-items:center;justify-content:center;min-height:100vh;color:#6b7585;font-family:system-ui,-apple-system,sans-serif;font-size:14px}
 </style>
 <script type="importmap">
@@ -63,8 +61,19 @@ const DAYS = [
         slots: [{ l: "Noite", t: "Fortaleza 22:50 — voo para Madrid, via Lisboa. Começa a jornada!" }] },
     { date: "2026-06-28", d: "28", mo: "jun", wd: "Domingo", city: "madrid", tz: "Europe/Madrid", kind: "day", here: "Madrid", hl: "Chegada em Madrid",
         slots: [{ l: "Tarde", t: "Chegada em Madrid. Boas-vindas ao campus, orientação e tour guiado." }, { l: "Noite", t: "Jantar no campus e socialização." }] },
-    { date: "2026-06-29", d: "29", mo: "jun", wd: "Segunda", city: "madrid", tz: "Europe/Madrid", kind: "day", here: "Madrid",
-        slots: [{ l: "Manhã", t: "Curso intensivo de espanhol." }, { l: "Tarde", t: "City tour histórico e monumental por Madrid." }, { l: "Noite", t: "Festa de boas-vindas." }] },
+    { date: "2026-06-29", d: "29", mo: "jun", wd: "Segunda", city: "madrid", tz: "Europe/Madrid", kind: "day", here: "Madrid", hl: "City Tour por Madri",
+        slots: [{ l: "Manhã", t: "Curso intensivo de espanhol." }, { l: "Tarde", t: "City tour histórico e monumental por Madrid." }, { l: "Noite", t: "Festa de boas-vindas." }],
+        sched: [
+            { t: "07:30", l: "Acordar" },
+            { t: "08:15", l: "Café da manhã" },
+            { t: "09:00", l: "Aulas de espanhol/inglês" },
+            { t: "12:30", l: "Almoço" },
+            { t: "13:30", l: "Tempo livre" },
+            { t: "15:30", l: "City Tour por Madri — Templo de Debod, Plaza Mayor, Parque del Retiro e Gran Vía (ônibus privativo da escola)" },
+            { t: "19:00", l: "Jogo do Brasil ⚽ — a escola vai organizar para assistirem na volta do passeio, com a camisa Hola da Copa", hl: true },
+            { t: "20:30", l: "Jantar" },
+            { t: "21:30", l: "Atividades no campus" },
+        ] },
     { date: "2026-06-30", d: "30", mo: "jun", wd: "Terça", city: "madrid", tz: "Europe/Madrid", kind: "day", here: "Madrid", hl: "Museu do Prado",
         slots: [{ l: "Manhã", t: "Curso intensivo de espanhol." }, { l: "Tarde", t: "Museu do Prado e Parque do Retiro." }, { l: "Noite", t: "Passeio pela Gran Vía." }] },
     { date: "2026-07-01", d: "01", mo: "jul", wd: "Quarta", city: "madrid", tz: "Europe/Madrid", kind: "day", here: "Madrid",
@@ -213,6 +222,27 @@ export default function App() {
     const planDay = idx >= 0 ? DAYS[idx] : status === "pre" ? first : DAYS[TOTAL - 1];
     const localHour = parseInt(inTZ(now, tz, { hour: "2-digit", hour12: false, hourCycle: "h23" }), 10);
     const phase = localHour < 12 ? "Manhã" : localHour < 18 ? "Tarde" : "Noite";
+    // Programação por horário (no fuso do destino) + bloco "AGORA"
+    const planTz = planDay.tz || tz;
+    const _lh = parseInt(inTZ(now, planTz, { hour: "2-digit", hour12: false, hourCycle: "h23" }), 10);
+    const _lm = parseInt(inTZ(now, planTz, { minute: "2-digit" }), 10);
+    const nowMinLocal = _lh * 60 + _lm;
+    const toMin = (s) => { const p = String(s).split(":"); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); };
+    let schedActive = -1;
+    let schedState = "during";
+    if (planDay.sched) {
+        planDay.sched.forEach((it, i) => { if (toMin(it.t) <= nowMinLocal)
+            schedActive = i; });
+        const _firstMin = toMin(planDay.sched[0].t);
+        const _lastMin = toMin(planDay.sched[planDay.sched.length - 1].t);
+        if (nowMinLocal < _firstMin)
+            schedState = "before";
+        else if (nowMinLocal >= _lastMin + 90)
+            schedState = "done";
+    }
+    // Alerta: já virou o dia no destino, mas no Brasil ainda é o dia anterior
+    const dayAhead = status === "live" && dateInTZ(now, planTz) !== dateInTZ(now, "America/Fortaleza");
+    const placePhrase = planTz === "Europe/London" ? "em Londres" : "na Espanha";
     const dayNum = idx >= 0 ? idx + 1 : status === "pre" ? 0 : TOTAL;
     const pct = status === "post" ? 100 : Math.max(0, Math.min(100, (dayNum / TOTAL) * 100));
     const daysToStart = Math.max(0, Math.ceil((new Date(first.date) - new Date(todayStr)) / 86400000));
@@ -249,6 +279,21 @@ export default function App() {
                     React.createElement("span", { className: "pulse", style: { width: 8, height: 8, borderRadius: "50%", background: LIVE, animation: "pulseRed 1.6s infinite" } }),
                     React.createElement("span", { style: { fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", color: LIVE, textTransform: "uppercase" } }, "Ao vivo")))),
             tab === "hoje" && (React.createElement("div", { className: "fadeUp", style: { padding: "0 14px" } },
+                dayAhead && (React.createElement("div", { className: "flex items-center", style: { gap: 10, background: "#eceef6", border: "1px solid #d8deee", borderRadius: 14, padding: "11px 13px", marginBottom: 12 } },
+                    React.createElement("div", { style: { width: 30, height: 30, borderRadius: 9, background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+                        React.createElement(Moon, { size: 15, color: "#fff" })),
+                    React.createElement("div", { style: { fontSize: 12, lineHeight: 1.4, color: NAVY } },
+                        React.createElement("b", null,
+                            "L\u00E1 j\u00E1 \u00E9 ",
+                            planDay.wd,
+                            ", ",
+                            planDay.d,
+                            "/",
+                            planDay.mo,
+                            "."),
+                        " Voc\u00EA est\u00E1 vendo a programa\u00E7\u00E3o de hoje ",
+                        placePhrase,
+                        " \u2014 no Brasil ainda \u00E9 o dia anterior."))),
                 React.createElement("div", { style: { borderRadius: 22, padding: "20px 20px 18px", color: "#fff", position: "relative", overflow: "hidden",
                         backgroundImage: isMoving
                             ? `linear-gradient(150deg, ${NAVY}, ${cityMeta.c2})`
@@ -305,17 +350,30 @@ export default function App() {
                     React.createElement("div", { className: "flex items-center", style: { gap: 7, marginBottom: 10 } },
                         React.createElement("div", { style: { width: 4, height: 16, borderRadius: 3, background: cityMeta.c } }),
                         React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: NAVY } }, "A programa\u00E7\u00E3o de hoje")),
-                    React.createElement("div", { style: { background: "#fff", border: "1px solid #ece6da", borderRadius: 16, overflow: "hidden" } }, planDay.slots.map((s, i) => {
-                        const active = s.l.includes(phase) || s.l.startsWith("Dia");
-                        return (React.createElement("div", { key: i, className: "flex", style: { gap: 11, padding: "13px 15px", borderTop: i ? "1px solid #f1ece2" : "none", background: active ? cityMeta.soft : "#fff" } },
-                            React.createElement("div", { style: { minWidth: 74 } },
-                                React.createElement("div", { className: "flex items-center", style: { gap: 5, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: active ? cityMeta.c : MUTED } },
-                                    phaseIcon(s.l),
-                                    " ",
-                                    s.l),
-                                active && React.createElement("div", { style: { fontSize: 9, fontWeight: 700, color: cityMeta.c, marginTop: 3, letterSpacing: ".06em" } }, "\u25CF AGORA")),
-                            React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.45, color: INK } }, s.t)));
-                    })),
+                    React.createElement("div", { style: { background: "#fff", border: "1px solid #ece6da", borderRadius: 16, overflow: "hidden" } },
+                        planDay.sched && schedState !== "during" && (React.createElement("div", { className: "flex items-center", style: { gap: 8, padding: "12px 15px", background: cityMeta.soft } },
+                            schedState === "before" ? React.createElement(Sun, { size: 15, color: cityMeta.c }) : React.createElement(Moon, { size: 15, color: cityMeta.c }),
+                            React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: cityMeta.c } }, schedState === "before"
+                                ? "A programação de hoje começa às " + planDay.sched[0].t + "."
+                                : "A programação de hoje terminou — até amanhã!"))),
+                        planDay.sched ? planDay.sched.map((it, i) => {
+                            const isNow = schedState === "during" && i === schedActive;
+                            return (React.createElement("div", { key: i, className: "flex", style: { gap: 11, padding: "12px 15px", borderTop: i ? "1px solid #f1ece2" : "none", background: isNow ? cityMeta.soft : (it.hl ? "#fbf6ea" : "#fff") } },
+                                React.createElement("div", { style: { minWidth: 56 } },
+                                    React.createElement("div", { style: { fontSize: 13.5, fontWeight: 800, letterSpacing: ".01em", color: isNow ? cityMeta.c : NAVY } }, it.t),
+                                    isNow && React.createElement("div", { style: { fontSize: 9, fontWeight: 700, color: cityMeta.c, marginTop: 3, letterSpacing: ".06em" } }, "\u25CF AGORA")),
+                                React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.45, color: INK } }, it.hl ? React.createElement("b", null, it.l) : it.l)));
+                        }) : planDay.slots.map((s, i) => {
+                            const active = s.l.includes(phase) || s.l.startsWith("Dia");
+                            return (React.createElement("div", { key: i, className: "flex", style: { gap: 11, padding: "13px 15px", borderTop: i ? "1px solid #f1ece2" : "none", background: active ? cityMeta.soft : "#fff" } },
+                                React.createElement("div", { style: { minWidth: 74 } },
+                                    React.createElement("div", { className: "flex items-center", style: { gap: 5, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: active ? cityMeta.c : MUTED } },
+                                        phaseIcon(s.l),
+                                        " ",
+                                        s.l),
+                                    active && React.createElement("div", { style: { fontSize: 9, fontWeight: 700, color: cityMeta.c, marginTop: 3, letterSpacing: ".06em" } }, "\u25CF AGORA")),
+                                React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.45, color: INK } }, s.t)));
+                        })),
                     React.createElement("div", { style: { fontSize: 10.5, color: MUTED, textAlign: "center", marginTop: 9 } }, "Atualiza sozinho pela data. A programa\u00E7\u00E3o pode ter pequenos ajustes da escola."))))),
             tab === "roteiro" && (React.createElement("div", { className: "fadeUp", style: { padding: "2px 14px" } }, ROUTE.map((ck) => {
                 const list = DAYS.filter((d) => d.city === ck);
